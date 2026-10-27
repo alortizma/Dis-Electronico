@@ -1,0 +1,14 @@
+{
+  "name": "Proyecto Cafecito — Realidad Mixta",
+  "short_name": "Cafecito",
+  "description": "Juego mixed reality: escanea plantas de café y cura las enfermas. Compatible con Meta Quest (WebXR).",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#04090c",
+  "theme_color": "#04090c",
+  "lang": "es",
+  "icons": [
+    { "src": "assets/logo.png", "sizes": "1920x1280", "type": "image/png" }
+  ]
+}

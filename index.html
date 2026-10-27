@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04090c">
+<link rel="manifest" href="manifest.json">
+<title>Proyecto Cafecito · Realidad Mixta</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+<style>
+/* =========================================================
+   PROYECTO CAFECITO — Realidad Mixta (archivo autocontenido)
+   ========================================================= */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: #04090c;
+  color: #e8f6ff;
+  font-family: 'Segoe UI', 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hidden { display: none !important; }
+
+/* ---------------- Cámara y fondos ---------------- */
+#bgFallback {
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 62%, rgba(46,194,106,.16), transparent 70%),
+    linear-gradient(180deg, #0b2230 0%, #0a1c24 38%, #071511 70%, #04100a 100%);
+}
+#bgFallback::before, #bgFallback::after {
+  content: ''; position: absolute; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.07), transparent 70%);
+  animation: drift 18s ease-in-out infinite alternate;
+}
+#bgFallback::before { width: 340px; height: 340px; top: 8%; left: -60px; }
+#bgFallback::after { width: 260px; height: 260px; top: 20%; right: -40px; animation-delay: -9s; }
+@keyframes drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(90px, 60px) scale(1.25); }
+}
+
+#cam {
+  position: fixed; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  background: #04090c;
+}
+#cam.mirrored { transform: scaleX(-1); }
+
+/* ---------------- Suelo holográfico (estático, barato) ---------------- */
+#floorWrap {
+  position: fixed; inset: 0; z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ---------------- Atmósfera ---------------- */
+#vignette {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 48%, rgba(2,10,14,.65) 100%);
+}
+#scanlines {
+  position: fixed; inset: 0; z-index: 4; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 4px);
+  opacity: .45;
+}
+
+/* ---------------- Escena 3D ---------------- */
+#stage {
+  position: fixed; inset: 0; z-index: 2;
+  perspective: 420px;
+  touch-action: none;
+  cursor: grab;
+}
+#stage.grabbing { cursor: grabbing; }
+#world {
+  position: absolute; left: 50%; top: 50%;
+  width: 0; height: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+#plants { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; }
+
+/* ---------------- Plantas ---------------- */
+.plant3d {
+  position: absolute; left: 0; top: 0;
+  transform-style: preserve-3d;
+  transition: opacity .25s ease;
+}
+.plant {
+  position: absolute; left: 0; top: 0;
+  width: 150px;
+  aspect-ratio: 120 / 170;
+  transform: translate(-50%, -100%) scale(var(--s, 1));
+  transform-origin: 50% 100%;
+}
+.bob { width: 100%; height: 100%; animation: bob 4.5s ease-in-out infinite; }
+.plant3d.sick .bob { animation: bobSick 5s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes bobSick { 0%,100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-4px) rotate(1.5deg); } }
+
+.plant3d.sick .bob { filter: drop-shadow(0 0 10px rgba(255,90,90,.45)); }
+.plant3d.cured .bob { animation: curePop .55s cubic-bezier(.2,1.4,.4,1); }
+@keyframes curePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+.dot {
+  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #38e07a;
+  box-shadow: 0 0 10px #38e07a, 0 0 4px #38e07a inset;
+}
+.plant3d.sick .dot {
+  background: #ff5d6c;
+  box-shadow: 0 0 12px #ff5d6c, 0 0 4px #ff5d6c inset;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.35); } }
+
+.tag {
+  position: absolute; left: 50%; bottom: 100%;
+  transform: translateX(-50%) translateY(8px);
+  padding: 4px 10px;
+  background: rgba(6,20,26,.92);
+  border: 1px solid rgba(77,215,255,.5);
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity .3s, transform .3s;
+  pointer-events: none;
+}
+.plant.aimed .tag { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------------- Visor / retícula ---------------- */
+#reticle {
+  position: fixed; z-index: 5; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  width: min(58vmin, 330px);
+}
+.ret-frame {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(77,215,255,.65);
+  box-shadow: 0 0 26px rgba(77,215,255,.35), inset 0 0 34px rgba(77,215,255,.10);
+  transition: border-color .25s, box-shadow .25s;
+}
+#reticle.locked .ret-frame {
+  border-color: #38e07a;
+  box-shadow: 0 0 30px rgba(56,224,122,.5), inset 0 0 34px rgba(56,224,122,.15);
+}
+.ret-sweep {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(77,215,255,.4) 22deg, transparent 55deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 52%, #000 58%, #000 100%);
+  mask-image: radial-gradient(circle, transparent 52%, #000 58%, #000 100%);
+  animation: sweep 3.4s linear infinite;
+}
+#reticle.locked .ret-sweep { animation: none; opacity: 0; }
+@keyframes sweep { to { transform: rotate(360deg); } }
+.ret-ring { position: absolute; inset: 12%; width: 76%; height: 76%; overflow: visible; }
+.ret-ring .ringbg { fill: none; stroke: rgba(77,215,255,.22); stroke-width: 5; }
+.ret-ring #ringFg {
+  fill: none; stroke: #4dd7ff; stroke-width: 5; stroke-linecap: round;
+  stroke-dasharray: 326.7; stroke-dashoffset: 326.7;
+  transform: rotate(-90deg); transform-origin: 60px 60px;
+  transition: stroke .25s;
+}
+#reticle.locked .ret-ring #ringFg { stroke: #38e07a; stroke-dashoffset: 0; }
+.ret-cross {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(rgba(77,215,255,.7), rgba(77,215,255,.7)) center 1px / 34px 2px no-repeat,
+    linear-gradient(rgba(77,215,255,.7), rgba(77,215,255,.7)) 1px center / 2px 34px no-repeat;
+  opacity: .8;
+}
+.ret-corners i {
+  position: absolute; width: 26px; height: 26px;
+  border: 3px solid rgba(77,215,255,.8);
+}
+.ret-corners i:nth-child(1) { left: -42px; top: -42px; border-right: none; border-bottom: none; border-radius: 10px 0 0 0; }
+.ret-corners i:nth-child(2) { right: -42px; top: -42px; border-left: none; border-bottom: none; border-radius: 0 10px 0 0; }
+.ret-corners i:nth-child(3) { left: -42px; bottom: -42px; border-right: none; border-top: none; border-radius: 0 0 0 10px; }
+.ret-corners i:nth-child(4) { right: -42px; bottom: -42px; border-left: none; border-top: none; border-radius: 0 0 10px 0; }
+
+#readout {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 78%;
+  text-align: center;
+  font-size: clamp(11px, 2.6vmin, 15px);
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: #bfefff;
+  text-shadow: 0 0 10px rgba(77,215,255,.8), 0 1px 4px #000;
+  opacity: 0;
+  transition: opacity .2s;
+}
+#readout.show { opacity: 1; }
+
+/* ---------------- HUD ---------------- */
+#hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+#hud button { pointer-events: auto; }
+.hud-top {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 16px;
+  padding-top: calc(14px + env(safe-area-inset-top));
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { width: 42px; height: 42px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(77,215,255,.4); }
+.brand span {
+  font-size: 11px; font-weight: 800; letter-spacing: 2px; line-height: 1.25;
+  color: #7fe3ff; text-shadow: 0 0 10px rgba(77,215,255,.5);
+}
+.stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pill {
+  background: rgba(6,22,28,.9);
+  border: 1px solid rgba(77,215,255,.35);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pill b { color: #7fe3ff; }
+
+.hud-bottom {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 8px;
+  padding: 14px 16px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+}
+#hint {
+  flex: 1 1 34%;
+  min-width: 0;
+  background: rgba(6,22,28,.75);
+  border: 1px solid rgba(77,215,255,.2);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #a8d8e8;
+}
+.ctrls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: nowrap; }
+.ctrls button {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: rgba(6,22,28,.9);
+  border: 1px solid rgba(77,215,255,.35);
+  color: #dff6ff;
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform .15s, background .15s;
+  touch-action: none;
+}
+.ctrls button:active { transform: scale(.9); background: rgba(20,60,70,.9); }
+
+/* D-pad de movimiento */
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(4, 44px);
+  gap: 5px;
+}
+.dpad .dp {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: rgba(6,22,28,.9);
+  border: 1px solid rgba(77,215,255,.35);
+  color: #dff6ff;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform .1s, background .15s;
+  touch-action: none;
+  user-select: none;
+}
+.dpad .dp:active { transform: scale(.85); background: rgba(20,70,80,.9); }
+.dpad .up    { grid-area: 1 / 2; font-size: 14px; }
+.dpad .left  { grid-area: 2 / 1; }
+.dpad .right { grid-area: 2 / 3; }
+.dpad .down  { grid-area: 2 / 2; font-size: 14px; }
+.dpad .near  { grid-area: 3 / 2; font-size: 13px; }
+.dpad .far   { grid-area: 4 / 2; font-size: 13px; }
+
+/* ---------------- Panel de planta ---------------- */
+#panel {
+  position: fixed; left: 50%; bottom: 18px;
+  transform: translateX(-50%) translateY(160%);
+  width: min(94vw, 470px);
+  z-index: 30;
+  background: rgba(7, 22, 27, .96);
+  border: 1px solid rgba(77,215,255,.45);
+  border-radius: 18px;
+  box-shadow: 0 14px 44px rgba(0,0,0,.55), 0 0 34px rgba(77,215,255,.14);
+  padding: 16px 18px;
+  transition: transform .38s cubic-bezier(.2,.9,.3,1.25);
+}
+#panel.show { transform: translateX(-50%) translateY(0); }
+
+.p-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.p-icon { font-size: 26px; filter: drop-shadow(0 0 8px rgba(56,224,122,.5)); }
+.p-titles { flex: 1; }
+.p-titles b { display: block; font-size: 16px; color: #e8f6ff; }
+.p-titles small { font-size: 11px; color: #6fb8cc; letter-spacing: 1px; }
+.badge {
+  font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  padding: 5px 10px; border-radius: 999px;
+  white-space: nowrap;
+}
+.badge.sick { background: rgba(255,93,108,.18); border: 1px solid #ff5d6c; color: #ff97a3; }
+.badge.ok { background: rgba(56,224,122,.16); border: 1px solid #38e07a; color: #9dffbc; }
+
+.desc { font-size: 13px; color: #b8d6e2; line-height: 1.5; margin-bottom: 8px; }
+.symptoms { list-style: none; margin: 4px 0 12px; }
+.symptoms li {
+  font-size: 13px; color: #ffc9cf;
+  background: rgba(255,93,108,.08);
+  border: 1px solid rgba(255,93,108,.25);
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+}
+.p-actions { display: flex; gap: 10px; }
+.p-actions button { flex: 1; }
+
+button.primary {
+  background: linear-gradient(135deg, #2ec26a, #1d9e50);
+  color: #04210f;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(56,224,122,.4);
+  transition: transform .12s, filter .12s;
+  touch-action: manipulation;
+}
+button.primary:active { transform: scale(.96); }
+button.primary:hover { filter: brightness(1.12); }
+button.primary.big { width: 100%; padding: 16px; font-size: 18px; margin-top: 8px; }
+button:not(.primary) {
+  background: rgba(10,30,38,.9);
+  color: #bfefff;
+  border: 1px solid rgba(77,215,255,.4);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s, transform .12s;
+  touch-action: manipulation;
+}
+button:not(.primary):active { transform: scale(.96); }
+button:not(.primary):hover { background: rgba(16,50,60,.95); }
+
+/* ---------------- Toast y partículas ---------------- */
+#toast {
+  position: fixed; left: 50%; bottom: 108px;
+  transform: translateX(-50%) translateY(16px);
+  z-index: 40;
+  background: rgba(6,22,28,.95);
+  border: 1px solid rgba(56,224,122,.5);
+  color: #b8ffd9;
+  font-size: 13px; font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s, transform .3s;
+  box-shadow: 0 6px 24px rgba(0,0,0,.4);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.particle {
+  position: fixed; z-index: 45; pointer-events: none;
+  width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #c9ffe0, #2ec26a);
+  animation: part .95s ease-out forwards;
+}
+@keyframes part {
+  from { transform: scale(var(--s, 1)); opacity: 1; }
+  to   { transform: translate(var(--dx, 0), var(--dy, 0)) scale(0); opacity: 0; }
+}
+
+/* ---------------- Pantallas completas ---------------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(2,8,10,.85);
+  padding: 20px;
+}
+.card {
+  width: min(94vw, 440px);
+  background: rgba(7, 22, 27, .97);
+  border: 1px solid rgba(77,215,255,.45);
+  border-radius: 22px;
+  box-shadow: 0 0 60px rgba(77,215,255,.15), 0 20px 60px rgba(0,0,0,.6);
+  padding: 30px 26px;
+  text-align: center;
+  animation: cardIn .45s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes cardIn {
+  from { transform: translateY(30px) scale(.92); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+.card img#logo {
+  width: 100%; max-height: 130px; object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid rgba(77,215,255,.4);
+  margin-bottom: 16px;
+}
+.card h1 {
+  font-size: 24px; letter-spacing: 4px; font-weight: 800;
+  color: #7fe3ff;
+  text-shadow: 0 0 18px rgba(77,215,255,.6);
+}
+.card .sub { font-size: 12px; color: #6fb8cc; letter-spacing: 2px; margin-top: 4px; }
+.how {
+  list-style: none;
+  text-align: left;
+  margin: 20px 0 6px;
+}
+.how li {
+  font-size: 13px; color: #c8e4ee; line-height: 1.6;
+  background: rgba(77,215,255,.07);
+  border: 1px solid rgba(77,215,255,.2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+}
+.note { font-size: 11px; color: #5e8f9c; margin-top: 14px; }
+
+.card.end #endEmoji { font-size: 54px; margin-bottom: 6px; }
+.card.end h2 { font-size: 20px; color: #7fe3ff; letter-spacing: 2px; }
+.card.end #endSub { font-size: 13px; color: #a8d8e8; margin: 6px 0 14px; }
+#endStats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-bottom: 20px;
+}
+#endStats .stat {
+  background: rgba(77,215,255,.08);
+  border: 1px solid rgba(77,215,255,.25);
+  border-radius: 12px;
+  padding: 10px;
+}
+#endStats .stat b { display: block; font-size: 18px; color: #7fe3ff; }
+#endStats .stat small { font-size: 11px; color: #6fb8cc; }
+.end-actions { display: flex; flex-direction: column; gap: 10px; }
+
+@media (max-width: 600px) {
+  .hud-bottom { gap: 6px; padding: 10px 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  #hint { font-size: 10px; padding: 6px 9px; flex-basis: 40%; }
+  .ctrls button { width: 38px; height: 38px; font-size: 17px; }
+  .dpad {
+    grid-template-columns: repeat(3, 38px);
+    grid-template-rows: repeat(4, 38px);
+    gap: 4px;
+  }
+  .dpad .dp { width: 38px; height: 38px; font-size: 14px; }
+  #panel { bottom: 196px; padding: 13px 14px; }
+  #toast { bottom: 220px; font-size: 11px; padding: 8px 12px; }
+  .card { padding: 22px 18px; }
+  .how li { padding: 7px 10px; font-size: 12px; }
+  .card img#logo { max-height: 80px; margin-bottom: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Fondo simulado (se usa si no hay cámara) -->
+<div id="bgFallback"></div>
+<!-- Cámara en primera persona -->
+<video id="cam" autoplay playsinline muted></video>
+
+<!-- Suelo holográfico (generado por JS, estático) -->
+<div id="floorWrap"></div>
+
+<!-- Atmósfera holografica -->
+<div id="vignette"></div>
+<div id="scanlines"></div>
+
+<!-- Escena 3D de realidad mixta -->
+<div id="stage">
+  <div id="world">
+    <div id="plants"></div>
+  </div>
+</div>
+
+<!-- Visor / pantalla de escaneo -->
+<div id="reticle">
+  <div class="ret-corners"><i></i><i></i><i></i><i></i></div>
+  <div class="ret-frame"></div>
+  <div class="ret-sweep"></div>
+  <svg class="ret-ring" viewBox="0 0 120 120">
+    <circle class="ringbg" cx="60" cy="60" r="52"/>
+    <circle id="ringFg" cx="60" cy="60" r="52"/>
+  </svg>
+  <div class="ret-cross"></div>
+  <div id="readout">Toca ◀▶▲▼ para girar</div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="brand"><img id="logoSmall" src="assets/logo.png" alt="" onerror="this.style.display='none'"><span>PROYECTO<br>CAFECITO</span></div>
+    <div class="stats">
+      <div class="pill">🌿 <b id="hudCured">0</b>/<span id="hudTotal">0</span></div>
+      <div class="pill">☕ <b id="hudBeans">0</b></div>
+      <div class="pill">⏱ <b id="hudTime">--</b></div>
+      <div class="pill">⭐ <b id="hudScore">0</b></div>
+    </div>
+  </div>
+  <div class="hud-bottom">
+    <div id="hint">Toca ◀▶▲▼ para girar · Toca una planta para escanearla</div>
+    <div class="ctrls">
+      <button id="btnMute" title="Sonido">🔊</button>
+      <button id="btnCam" title="Cambiar cámara">📷</button>
+      <div class="dpad">
+        <button class="dp up"    data-act="up"    title="Mirar arriba">▲</button>
+        <button class="dp left"  data-act="left"  title="Girar a la izquierda">◀</button>
+        <button class="dp right" data-act="right" title="Girar a la derecha">▶</button>
+        <button class="dp down"  data-act="down"  title="Mirar abajo">▼</button>
+        <button class="dp near"  data-act="near"  title="Acercarme">🔼</button>
+        <button class="dp far"   data-act="far"   title="Alejarme">🔽</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel de datos de la planta escanea -->
+<div id="panel"></div>
+<div id="toast"></div>
+
+<!-- Pantalla de inicio -->
+<div id="intro" class="overlay">
+  <div class="card intro">
+    <img id="logo" src="assets/logo.png" alt="Proyecto Cafecito" onerror="this.remove()">
+    <h1>PROYECTO CAFECITO</h1>
+    <p class="sub">Mixed Reality Scanner · Cuida las plantas de café</p>
+    <ul class="how">
+      <li><b>📷</b> La cámara muestra las plantas holográficas a tu alrededor.</li>
+      <li><b>🎯</b> Mira una planta con el visor o <b>tócala directamente</b> para escanearla.</li>
+      <li><b>🌿</b> Pulsa <b>CURAR</b> para sanar las plantas enfermas antes de que acabe el tiempo.</li>
+      <li><b>🕹️</b> Toca ◀▶▲▼ para girar, 🔼🔽 para acercarte y alejarte.</li>
+    </ul>
+    <button id="btnPlay" class="primary big">▶ JUGAR</button>
+    <p class="note">Se pedirá permiso de cámara. Sin cámara se juega en modo simulado.</p>
+  </div>
+</div>
+
+<!-- Pantalla de fin de nivel -->
+<div id="end" class="overlay hidden">
+  <div class="card end">
+    <div id="endEmoji">🏆</div>
+    <h2 id="endTitle">¡Misión completa!</h2>
+    <p id="endSub">Todas las plantas están sanas.</p>
+    <div id="endStats"></div>
+    <div class="end-actions">
+      <button id="btnNext" class="primary">Siguiente nivel ▶</button>
+      <button id="btnRetry">Reiniciar nivel</button>
+      <button id="btnMenu">Menú</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   PROYECTO CAFECITO — Juego de Realidad Mixta
+   Escanea plantas de café holográficas con la cámara y cura
+   las que están enfermas antes de que acabe el tiempo.
+   ========================================================= */
+(function () {
+
+/* ---------- Utilidades ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const rand = (a, b) => a + Math.random() * (b - a);
+const rint = (a, b) => Math.floor(rand(a, b + 1));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- Sonido (Web Audio API, sin archivos) ---------- */
+const Sound = (function () {
+  let ctx = null;
+  let muted = false;
+  function ac() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function tone(freq, dur, opt) {
+    if (muted) return;
+    opt = opt || {};
+    try {
+      const c = ac();
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = opt.type || 'sine';
+      const t0 = c.currentTime + (opt.delay || 0);
+      o.frequency.setValueAtTime(freq, t0);
+      if (opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(opt.vol || 0.15, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    } catch (e) { /* sin audio */ }
+  }
+  return {
+    setMuted(m) { muted = m; },
+    isMuted() { return muted; },
+    scan()  { tone(300, 0.5, { to: 900, type: 'sawtooth', vol: 0.05 }); },
+    aim()   { tone(700, 0.07, { vol: 0.09 }); },
+    lock()  { tone(660, 0.1, { vol: 0.14 }); tone(990, 0.14, { vol: 0.14, delay: 0.09 }); },
+    cure()  { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, { type: 'triangle', vol: 0.15, delay: i * 0.08 })); },
+    ok()    { tone(880, 0.1, { vol: 0.13 }); tone(1175, 0.15, { vol: 0.11, delay: 0.1 }); },
+    bad()   { tone(150, 0.3, { type: 'square', vol: 0.1 }); tone(110, 0.3, { type: 'square', vol: 0.08, delay: 0.06 }); },
+    click() { tone(520, 0.05, { vol: 0.07 }); },
+    win()   { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.3, { type: 'triangle', vol: 0.16, delay: i * 0.12 })); },
+    lose()  { [440, 349, 261].forEach((f, i) => tone(f, 0.4, { type: 'sawtooth', vol: 0.09, delay: i * 0.15 })); }
+  };
+})();
+
+/* ---------- Cámara ---------- */
+const Camera = (function () {
+  const video = $('#cam');
+  let stream = null;
+  let facing = 'environment';
+  async function start() {
+    stop();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      video.classList.toggle('mirrored', facing === 'user');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  function stop() {
+    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+    video.srcObject = null;
+  }
+  function toggle() {
+    facing = facing === 'environment' ? 'user' : 'environment';
+    return start();
+  }
+  return { start, stop, toggle };
+})();
+
+/* ---------- Datos del juego ---------- */
+const LEVELS = [
+  { n: 4, sick: 1, time: 70, name: 'Finca El Cafecito' },
+  { n: 6, sick: 2, time: 90, name: 'Plantación Sur' },
+  { n: 8, sick: 3, time: 110, name: 'Tesis del Campo' }
+];
+
+const VARIETIES = [
+  { name: 'Café Arábica', type: 'TÍPICA', desc: 'Hojas dentadas, grano alargado y alta calidad aromática.' },
+  { name: 'Café Robusta', type: 'CONILON', desc: 'Planta vigorosa, grano redondo y con más cuerpo.' },
+  { name: 'Café Catimor', type: 'CATIMOR', desc: 'Híbrido resistente, hojas anchas y brillantes.' },
+  { name: 'Café Geisha', type: 'GEISHA', desc: 'Variedad exclusiva, porte erguido y hojas finas.' }
+];
+
+const SYMPTOMS = [
+  { icon: '🟤', t: 'Manchas pardas en hojas (ojo de gallo)' },
+  { icon: '🟡', t: 'Hojas amarillas y caída' },
+  { icon: '🥀', t: 'Marchitamiento general' },
+  { icon: '🍄', t: 'Mancha oscura en tallos' },
+  { icon: '🔴', t: 'Pulgones en los brotes' }
+];
+
+function pickSymptoms() {
+  const pool = SYMPTOMS.slice();
+  const out = [];
+  const n = rint(2, 3);
+  for (let i = 0; i < n && pool.length; i++) {
+    out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return out;
+}
+
+/* ---------- Planta SVG ---------- */
+function coffeeSVG(state, uid) {
+  const sick = state === 'sick';
+  const L1 = sick ? '#d8a73c' : '#2f9e57';
+  const L2 = sick ? '#b8862a' : '#1f7d45';
+  const ED = sick ? '#7a5417' : '#14552b';
+  const TRK = sick ? '#6a5235' : '#7c5b3e';
+  const spots = sick ?
+    '<circle cx="42" cy="50" r="3.4" fill="#6b4a12" opacity=".85"/>' +
+    '<circle cx="58" cy="42" r="2.6" fill="#6b4a12" opacity=".75"/>' +
+    '<circle cx="84" cy="70" r="3" fill="#6b4a12" opacity=".8"/>' +
+    '<circle cx="34" cy="76" r="2.4" fill="#6b4a12" opacity=".7"/>' +
+    '<circle cx="44" cy="114" r="3.2" fill="#6b4a12" opacity=".85"/>' +
+    '<circle cx="80" cy="112" r="2.6" fill="#6b4a12" opacity=".75"/>' : '';
+  const berries = !sick ?
+    '<circle cx="52" cy="88" r="5" fill="#d62828"/>' +
+    '<circle cx="60" cy="96" r="5" fill="#e53935"/>' +
+    '<circle cx="68" cy="88" r="5" fill="#d62828"/>' : '';
+  return '<svg viewBox="0 0 120 170" width="100%" height="100%" style="display:block">' +
+    '<defs><linearGradient id="lg' + uid + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="' + L1 + '"/><stop offset="1" stop-color="' + L2 + '"/>' +
+    '</linearGradient></defs>' +
+    '<path d="M60 170 C 60 140, 57 118, 61 96" stroke="' + TRK + '" stroke-width="9" fill="none" stroke-linecap="round"/>' +
+    '<path d="M60 118 C 48 112, 36 100, 30 84" stroke="' + TRK + '" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+    '<path d="M60 110 C 72 104, 84 92, 90 76" stroke="' + TRK + '" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+    '<path d="M60 130 C 50 128, 40 122, 34 112" stroke="' + TRK + '" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+    '<path d="M60 126 C 70 124, 80 118, 86 108" stroke="' + TRK + '" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+    '<g stroke="' + ED + '" stroke-width="1">' +
+    '<ellipse cx="60" cy="58" rx="17" ry="8" fill="url(#lg' + uid + ')" transform="rotate(-6 60 58)"/>' +
+    '<ellipse cx="36" cy="80" rx="15" ry="7" fill="url(#lg' + uid + ')" transform="rotate(-38 36 80)"/>' +
+    '<ellipse cx="85" cy="76" rx="15" ry="7" fill="url(#lg' + uid + ')" transform="rotate(38 85 76)"/>' +
+    '<ellipse cx="33" cy="104" rx="13" ry="6" fill="url(#lg' + uid + ')" transform="rotate(-52 33 104)"/>' +
+    '<ellipse cx="88" cy="100" rx="13" ry="6" fill="url(#lg' + uid + ')" transform="rotate(52 88 100)"/>' +
+    '<ellipse cx="44" cy="122" rx="11" ry="5.5" fill="url(#lg' + uid + ')" transform="rotate(-68 44 122)"/>' +
+    '<ellipse cx="77" cy="124" rx="11" ry="5.5" fill="url(#lg' + uid + ')" transform="rotate(66 77 124)"/>' +
+    '</g>' + spots + berries +
+    '</svg>';
+}
+
+/* ---------- Clase Planta ---------- */
+let uidSeq = 0;
+class Plant {
+  constructor(opts) {
+    this.uid = 'p' + (++uidSeq);
+    this.x = opts.x;
+    this.z = opts.z;
+    this.scale = opts.scale;
+    this.variety = opts.variety;
+    this.healthy = opts.healthy;
+    this.state = this.healthy ? 'healthy' : 'sick';
+    this.health = this.healthy ? 100 : rint(18, 45);
+    this.symptoms = this.healthy ? [] : pickSymptoms();
+    this.aimed = false;
+    this.aim = 0;
+    this.locked = false;
+    this.cured = false;
+    this.sx = 0; this.sy = 0; this.sw = 0; this.sh = 0; this.zf = 0;
+    this._op = 1;
+    this._vis = 'visible';
+    this.build();
+  }
+  build() {
+    const wrap = document.createElement('div');
+    wrap.className = 'plant3d' + (this.state === 'sick' ? ' sick' : '');
+    wrap.style.transform = 'translate3d(' + this.x + 'px, 60px, ' + this.z + 'px)';
+    wrap.innerHTML =
+      '<div class="plant">' +
+        '<div class="bob">' + coffeeSVG(this.state, this.uid) + '</div>' +
+        '<div class="tag"></div>' +
+        '<div class="dot"></div>' +
+      '</div>';
+    this.wrap = wrap;
+    this.el = $('.plant', wrap);
+    this.tag = $('.tag', wrap);
+    this.dot = $('.dot', wrap);
+    this.el.style.setProperty('--s', this.scale);
+    this.refreshTag();
+    $('#plants').appendChild(wrap);
+  }
+  repaint() {
+    $('.bob', this.el).innerHTML = coffeeSVG(this.state, this.uid);
+    this.wrap.classList.toggle('sick', this.state === 'sick');
+    this.refreshTag();
+  }
+  refreshTag() {
+    this.tag.textContent = (this.state === 'sick' ? '🟥 ' : '🟩 ') + this.variety.name;
+  }
+}
+
+/* ---------- Estado del juego ---------- */
+const Game = {
+  level: 0,
+  score: 0,
+  beans: 0,
+  plants: [],
+  active: null,
+  running: false,
+  timeLeft: 0,
+  cured: 0,
+  sickTotal: 0
+};
+
+/* ---------- Suelo holográfico (SVG estático, pintado una vez) ---------- */
+function buildFloor() {
+  const wrap = $('#floorWrap');
+  wrap.innerHTML = '';
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const horizon = Math.round(H * 0.52);
+  const vpX = W / 2;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; display:block;';
+
+  const vCols = 26;
+  for (let i = 0; i <= vCols; i++) {
+    const xb = (i / vCols) * W;
+    const l = document.createElementNS(svgNS, 'line');
+    l.setAttribute('x1', xb); l.setAttribute('y1', H);
+    l.setAttribute('x2', vpX); l.setAttribute('y2', horizon);
+    l.setAttribute('stroke', 'rgba(77,215,255,.22)');
+    l.setAttribute('stroke-width', '1');
+    svg.appendChild(l);
+  }
+  const hRows = 14;
+  for (let i = 1; i <= hRows; i++) {
+    const t = Math.pow(i / hRows, 1.8);
+    const y = horizon + t * (H - horizon);
+    const l = document.createElementNS(svgNS, 'line');
+    l.setAttribute('x1', 0); l.setAttribute('y1', y);
+    l.setAttribute('x2', W); l.setAttribute('y2', y);
+    l.setAttribute('stroke', 'rgba(77,215,255,.14)');
+    l.setAttribute('stroke-width', '1');
+    svg.appendChild(l);
+  }
+  wrap.appendChild(svg);
+
+  const glow = document.createElement('div');
+  glow.style.cssText = 'position:absolute; left:0; right:0; top:' + (horizon - 60) +
+    'px; height:120px; background:linear-gradient(180deg, transparent, rgba(77,215,255,.10));';
+  wrap.appendChild(glow);
+}
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(buildFloor, 150);
+});
+buildFloor();
+
+/* ---------- Movimiento de la vista ---------- */
+let curYaw = 0, curPitch = 0, tgtYaw = 0, tgtPitch = 0;
+let worldZ = 0;
+let lastX = 0, lastY = 0;
+let dragging = false;
+let tapStart = null;
+
+const stage = $('#stage');
+const world = $('#world');
+
+/* PERSP debe coincidir con `perspective` de #stage en CSS */
+const PERSP = 420;
+
+function applyDrag(dx, dy) {
+  tgtYaw += dx * 0.3;
+  /* arrastra arriba = mirar arriba (rotateX negativo) */
+  tgtPitch = clamp(tgtPitch + dy * 0.2, -30, 45);
+}
+
+/* Arrastrar para girar + toque directo sobre una planta para escanear */
+stage.addEventListener('pointerdown', (e) => {
+  if (!Game.running) return;
+  e.preventDefault();
+  dragging = true;
+  stage.classList.add('grabbing');
+  lastX = e.clientX;
+  lastY = e.clientY;
+  tapStart = { x: e.clientX, y: e.clientY, t: performance.now(), target: e.target };
+});
+window.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  applyDrag(e.clientX - lastX, e.clientY - lastY);
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
+window.addEventListener('pointerup', (e) => {
+  if (!dragging) return;
+  dragging = false;
+  stage.classList.remove('grabbing');
+  if (tapStart) {
+    const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+    const dur = performance.now() - tapStart.t;
+    if (moved < 14 && dur < 450) {
+      const p = plantFromEvent(tapStart.target);
+      if (p && !p.locked && !p.cured) {
+        lockPlant(p); /* toque = escaneo directo */
+      }
+    }
+    tapStart = null;
+  }
+});
+window.addEventListener('pointercancel', () => {
+  dragging = false;
+  stage.classList.remove('grabbing');
+  tapStart = null;
+});
+stage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function plantFromEvent(target) {
+  if (!target || !target.closest) return null;
+  const el = target.closest('.plant3d');
+  if (!el) return null;
+  for (const p of Game.plants) if (p.wrap === el) return p;
+  return null;
+}
+
+/* ---------- D-pad ---------- */
+function stepAct(act) {
+  switch (act) {
+    case 'left':  tgtYaw -= 5; break;
+    case 'right': tgtYaw += 5; break;
+    case 'up':    tgtPitch = clamp(tgtPitch - 4, -30, 45); break;
+    case 'down':  tgtPitch = clamp(tgtPitch + 4, -30, 45); break;
+    case 'near':  worldZ = clamp(worldZ - 28, -60, 140); break;
+    case 'far':   worldZ = clamp(worldZ + 28, -60, 140); break;
+  }
+}
+document.querySelectorAll('.dp').forEach((b) => {
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    stepAct(b.dataset.act);
+    const id = setInterval(() => stepAct(b.dataset.act), 70);
+    const up = () => {
+      clearInterval(id);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  });
+});
+
+/* ---------- Toast ---------- */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1900);
+}
+
+/* ---------- Partículas ---------- */
+function burst(cx, cy) {
+  for (let i = 0; i < 16; i++) {
+    const d = document.createElement('div');
+    d.className = 'particle';
+    const a = rand(0, Math.PI * 2);
+    const dist = rand(40, 120);
+    d.style.left = cx + 'px';
+    d.style.top = cy + 'px';
+    d.style.setProperty('--dx', Math.cos(a) * dist + 'px');
+    d.style.setProperty('--dy', (Math.sin(a) * dist - 40) + 'px');
+    d.style.setProperty('--s', rand(0.6, 1.4));
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 950);
+  }
+}
+
+/* ---------- HUD (solo actualiza cuando cambia) ---------- */
+function fmtTime(t) {
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return m + ':' + (s < 10 ? '0' + s : s);
+}
+const hudCache = {};
+function setHUD(id, val) {
+  if (hudCache[id] === val) return;
+  hudCache[id] = val;
+  $('#' + id).textContent = val;
+}
+function updateHUD() {
+  setHUD('hudCured', Game.cured);
+  setHUD('hudTotal', Game.sickTotal);
+  setHUD('hudBeans', Game.beans);
+  setHUD('hudScore', Game.score);
+  setHUD('hudTime', fmtTime(Math.max(0, Game.timeLeft)));
+  const tEl = $('#hudTime');
+  const danger = Game.timeLeft <= 15;
+  if (tEl.dataset.danger !== String(danger)) {
+    tEl.dataset.danger = String(danger);
+    tEl.style.color = danger ? '#ff97a3' : '';
+  }
+}
+
+/* ---------- Panel de planta ---------- */
+function panelHTML(p) {
+  const badge = p.cured
+    ? '<span class="badge ok">CUREADA ✓</span>'
+    : p.state === 'sick'
+      ? '<span class="badge sick">ENFERMO · Salud ' + p.health + '%</span>'
+      : '<span class="badge ok">SALUDABLE</span>';
+  const body = p.cured
+    ? '<p class="desc">¡La planta fue curada! Ahora luce sana y productiva. 🌱</p>'
+    : p.state === 'sick'
+      ? '<ul class="symptoms">' + p.symptoms.map((s) => '<li>' + s.icon + ' ' + s.t + '</li>').join('') + '</ul>'
+      : '<p class="desc">' + p.variety.desc + '</p><p class="desc">No presenta síntomas. ¡Sigue así!</p>';
+  const actions = (p.cured)
+    ? '<button class="primary" id="btnClose">✓ Listo</button>'
+    : p.state === 'sick'
+      ? '<button class="primary" id="btnCure">🌿 CURAR</button><button id="btnClose">Cerrar</button>'
+      : '<button class="primary" id="btnConfirm">✓ Confirmar (+20)</button><button id="btnClose">Cerrar</button>';
+  return '<div class="p-head"><div class="p-icon">🌿</div>' +
+    '<div class="p-titles"><b>' + p.variety.name + '</b><small>' + p.variety.type + '</small></div>' +
+    badge + '</div>' + body + '<div class="p-actions">' + actions + '</div>';
+}
+
+function openPanel(p) {
+  Game.active = p;
+  const panel = $('#panel');
+  panel.innerHTML = panelHTML(p);
+  panel.classList.add('show');
+  const bc = $('#btnCure');
+  if (bc) bc.onclick = () => curePlant(p);
+  const bf = $('#btnConfirm');
+  if (bf) bf.onclick = () => confirmPlant(p);
+  const bx = $('#btnClose');
+  if (bx) bx.onclick = () => hidePanel();
+}
+function hidePanel() {
+  $('#panel').classList.remove('show');
+  $('#panel').innerHTML = '';
+  Game.active = null;
+}
+
+function curePlant(p) {
+  if (p.cured) return;
+  const r = p.el.getBoundingClientRect();
+  burst(r.left + r.width / 2, r.top + r.height / 2);
+  p.cured = true;
+  p.state = 'healthy';
+  p.health = 100;
+  p.symptoms = [];
+  p.wrap.classList.remove('sick');
+  p.wrap.classList.add('cured');
+  p.repaint();
+  Sound.cure();
+  Game.score += 100;
+  Game.beans += 1;
+  Game.cured += 1;
+  updateHUD();
+  toast('🌿 Curada ' + p.variety.name + '  +100 ⭐  +1 ☕');
+  if (Game.cured >= Game.sickTotal) levelComplete();
+  openPanel(p);
+}
+
+function confirmPlant(p) {
+  if (p.cured || p.state !== 'healthy') return;
+  Sound.ok();
+  Game.score += 20;
+  updateHUD();
+  toast('Planta en buen estado  +20 ⭐');
+  hidePanel();
+}
+
+/* ---------- Escaneo ---------- */
+function lockPlant(p) {
+  p.locked = true;
+  p.aim = 0;
+  Sound.lock();
+  openPanel(p);
+}
+
+/* Posiciones en pantalla calculadas por matemáticas (sin layout forzado) */
+function updateGeometry() {
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
+  const c = Math.cos(curYaw), s = Math.sin(curYaw);
+  const cp = Math.cos(curPitch), sp = Math.sin(curPitch);
+  for (const p of Game.plants) {
+    const zA = 60 * sp + p.z * cp;
+    const yA = 60 * cp - p.z * sp;
+    const x1 = p.x * c - zA * s;
+    const z2 = p.x * s + zA * c;
+    const zf = z2 + worldZ;
+    const k = PERSP / (PERSP + zf);
+    p.sx = cx + x1 * k;
+    p.sy = cy + (yA + 30) * k;
+    p.sw = 150 * k * p.scale;
+    p.sh = 212.5 * k * p.scale;
+    p.zf = zf;
+    /* desvanecimiento suave al pasar el plano de la cámara */
+    let op = 1;
+    if (zf <= 0) op = 0;
+    else if (zf < 40) op = zf / 40;
+    const op2 = op.toFixed(2);
+    if (op2 !== p._op) {
+      p._op = op2;
+      p.wrap.style.opacity = op2;
+    }
+    const vis = zf > 0 ? 'visible' : 'hidden';
+    if (vis !== p._vis) {
+      p._vis = vis;
+      p.wrap.style.visibility = vis;
+    }
+  }
+}
+
+function updateScans(dt) {
+  const rcx = window.innerWidth / 2;
+  const rcy = window.innerHeight / 2;
+  const rr = Math.min(rcx, rcy) * 0.46;
+  const ret = $('#reticle');
+  let aiming = null;
+  let scanning = null;
+  let bestDist = Infinity;
+
+  for (const p of Game.plants) {
+    if (p.locked || p.cured || p.zf <= 0) {
+      p.aimed = false;
+      p.el.classList.remove('aimed');
+      continue;
+    }
+    const cx = p.sx;
+    const cy = p.sy - p.sh / 2;
+    const dist = Math.hypot(cx - rcx, cy - rcy);
+    /* Apuntar si el centro está en la zona o el centro del visor cae dentro de la planta */
+    const inR = dist < rr ||
+      (rcx > p.sx - p.sw / 2 && rcx < p.sx + p.sw / 2 &&
+       rcy > p.sy - p.sh && rcy < p.sy);
+    p.aimed = inR;
+    p.el.classList.toggle('aimed', inR);
+    if (inR) {
+      if (p.aim === 0) Sound.aim();
+      p.aim += dt;
+      if (p.aim >= 1.3) {
+        lockPlant(p);
+      } else if (dist < bestDist) {
+        bestDist = dist;
+        aiming = p;
+      }
+    } else {
+      p.aim = Math.max(0, p.aim - dt * 2);
+    }
+    if (p.aim > 0 && !p.locked) scanning = scanning || p;
+  }
+
+  /* ---- Lectura del visor ---- */
+  const readout = $('#readout');
+  const txt = (Game.active && Game.active.locked)
+    ? '🔒 BLOQUEADO · ' + (Game.active.state === 'sick' ? 'ENFERMA' : 'SANA')
+    : aiming
+      ? aiming.variety.name + ' · ' + (aiming.state === 'sick' ? 'ENFERMA 🟥' : 'SANA 🟩')
+      : 'Toca ◀▶▲▼ para girar · Toca plantas';
+  if (txt !== lastReadout) {
+    lastReadout = txt;
+    readout.textContent = txt;
+  }
+  const show = !!(Game.active && Game.active.locked) || !!aiming;
+  if (show !== lastShow) {
+    lastShow = show;
+    readout.classList.toggle('show', show);
+  }
+  const locked = !!(Game.active && Game.active.locked);
+  if (locked !== lastLocked) {
+    lastLocked = locked;
+    ret.classList.toggle('locked', locked);
+  }
+
+  /* ---- Anillo de progreso ---- */
+  const ring = $('#ringFg');
+  if (scanning) {
+    const k = clamp(scanning.aim / 1.3, 0, 1);
+    const off = 326.7 * (1 - k);
+    if (Math.abs(off - lastRing) > 0.5) {
+      lastRing = off;
+      ring.style.strokeDashoffset = off;
+    }
+  } else if (lastRing !== 326.7) {
+    lastRing = 326.7;
+    ring.style.strokeDashoffset = 326.7;
+  }
+}
+let lastReadout = '';
+let lastShow = false;
+let lastLocked = false;
+let lastRing = 326.7;
+
+/* ---------- Ciclo principal ---------- */
+let lastT = performance.now();
+let lastTr = '';
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (window.QuestMR && QuestMR.active) return; /* modo VR activo */
+  const dt = Math.min(0.06, (now - lastT) / 1000 || 0);
+  lastT = now;
+
+  /* Seguimiento 1:1 al dedo mientras arrastras (sin lag); suavizado para D-pad/teclado */
+  if (dragging) {
+    curYaw = tgtYaw;
+    curPitch = tgtPitch;
+  } else {
+    curYaw += (tgtYaw - curYaw) * Math.min(1, dt * 10);
+    curPitch += (tgtPitch - curPitch) * Math.min(1, dt * 10);
+  }
+
+  const tr = 'translateY(30px) translate3d(0px, 0px, ' + worldZ + 'px) ' +
+    'rotateY(' + (-curYaw) + 'deg) rotateX(' + curPitch + 'deg)';
+  if (tr !== lastTr) {
+    world.style.transform = tr;
+    lastTr = tr;
+  }
+
+  if (Game.running) {
+    updateGeometry();
+    updateScans(dt);
+    Game.timeLeft -= dt;
+    if (Game.timeLeft <= 0) {
+      Game.timeLeft = 0;
+      updateHUD();
+      if (Game.cured < Game.sickTotal) {
+        Sound.lose();
+        showEnd(false);
+      }
+    } else {
+      updateHUD();
+    }
+  }
+}
+requestAnimationFrame(frame);
+
+/* ---------- Flujo de niveles ---------- */
+function setupLevel() {
+  $('#plants').innerHTML = '';
+  Game.plants = [];
+  Game.active = null;
+  hidePanel();
+  const cfg = LEVELS[Game.level];
+  Game.sickTotal = cfg.sick;
+  Game.cured = 0;
+  Game.timeLeft = cfg.time;
+  const shuffled = VARIETIES.slice().sort(() => Math.random() - 0.5);
+
+  const sickIdx = new Set();
+  while (sickIdx.size < cfg.sick) sickIdx.add(rint(0, cfg.n - 1));
+
+  for (let i = 0; i < cfg.n; i++) {
+    const x = -370 + (i + 0.5) * (740 / cfg.n) + rand(-25, 25);
+    const z = 150 + (i % 3) * 95 + rand(-30, 30);
+    const variety = shuffled[i % shuffled.length];
+    Game.plants.push(new Plant({
+      x: x, z: z, scale: rand(0.85, 1.12), variety: variety, healthy: !sickIdx.has(i)
+    }));
+  }
+  updateHUD();
+  toast('Nivel ' + (Game.level + 1) + ' · ' + cfg.name + ' · Cura ' + cfg.sick + ' planta(s) enferma(s)');
+}
+
+function levelComplete() {
+  Sound.win();
+  setTimeout(() => showEnd(true), 700);
+}
+
+function showEnd(win) {
+  Game.running = false;
+  const lastLevel = Game.level >= LEVELS.length - 1;
+  $('#endEmoji').textContent = win ? (lastLevel ? '🏆' : '🌿') : '⏱';
+  $('#endTitle').textContent = win
+    ? (lastLevel ? '¡Campeón de Cafecito!' : '¡Misión completa!')
+    : 'Se agotó el tiempo';
+  $('#endSub').textContent = win
+    ? 'Todas las plantas de Café están sanas.'
+    : 'Quedaron plantas enfermas sin curar.';
+  $('#endStats').innerHTML =
+    '<div class="stat"><b>' + Game.cured + '/' + Game.sickTotal + '</b><small>Plantas curadas</small></div>' +
+    '<div class="stat"><b>' + Game.beans + '</b><small>☕ Granos recolectados</small></div>' +
+    '<div class="stat"><b>' + Game.score + '</b><small>⭐ Puntos</small></div>' +
+    '<div class="stat"><b>' + fmtTime(LEVELS[Game.level].time - Game.timeLeft) + '</b><small>⏱ Tiempo usado</small></div>';
+  $('#btnNext').classList.toggle('hidden', !(win && !lastLevel));
+  $('#end').classList.remove('hidden');
+}
+
+/* ---------- Menú / controles ---------- */
+async function startGame() {
+  Sound.click();
+  $('#intro').classList.add('hidden');
+  $('#end').classList.add('hidden');
+  $('#hud').classList.remove('hidden');
+  Game.level = 0;
+  Game.score = 0;
+  Game.beans = 0;
+  worldZ = 0;
+  tgtYaw = 0;
+  tgtPitch = 0;
+  curYaw = 0;
+  curPitch = 0;
+  lastTr = '';
+  setupLevel();
+  Game.running = true;
+  const ok = await Camera.start();
+  $('#bgFallback').classList.toggle('hidden', ok);
+  if (!ok) toast('Sin cámara → modo simulado');
+}
+
+function backToMenu() {
+  Sound.click();
+  Game.running = false;
+  $('#end').classList.add('hidden');
+  $('#hud').classList.add('hidden');
+  hidePanel();
+  $('#intro').classList.remove('hidden');
+}
+
+$('#btnPlay').addEventListener('click', startGame);
+$('#btnNext').addEventListener('click', () => {
+  Game.level += 1;
+  setupLevel();
+  Game.running = true;
+  $('#end').classList.add('hidden');
+});
+$('#btnRetry').addEventListener('click', () => {
+  setupLevel();
+  Game.running = true;
+  $('#end').classList.add('hidden');
+});
+$('#btnMenu').addEventListener('click', backToMenu);
+
+$('#btnMute').addEventListener('click', () => {
+  Sound.setMuted(!Sound.isMuted());
+  $('#btnMute').textContent = Sound.isMuted() ? '🔇' : '🔊';
+});
+$('#btnCam').addEventListener('click', async () => {
+  const ok = await Camera.toggle();
+  $('#bgFallback').classList.toggle('hidden', ok);
+  if (ok) { Sound.click(); } else { Sound.bad(); toast('No se pudo acceder a la cámara'); }
+});
+
+/* ---------- Teclado (desktop) ---------- */
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') { tgtYaw -= 6; e.preventDefault(); }
+  if (e.key === 'ArrowRight') { tgtYaw += 6; e.preventDefault(); }
+  if (e.key === 'ArrowUp') { tgtPitch = clamp(tgtPitch - 4, -30, 45); e.preventDefault(); }
+  if (e.key === 'ArrowDown') { tgtPitch = clamp(tgtPitch + 4, -30, 45); e.preventDefault(); }
+  if (e.key === 'w' || e.key === 'W') { worldZ = clamp(worldZ - 14, -60, 140); }
+  if (e.key === 's' || e.key === 'S') { worldZ = clamp(worldZ + 14, -60, 140); }
+  if (e.key === 'Enter' || e.key === ' ') {
+    const a = Game.active;
+    if (a) {
+      if (a.cured) hidePanel();
+      else if (a.state === 'sick') curePlant(a);
+      else confirmPlant(a);
+    }
+  }
+  if (e.key === 'Escape') hidePanel();
+  if (e.key === 'm' || e.key === 'M') {
+    Sound.setMuted(!Sound.isMuted());
+    $('#btnMute').textContent = Sound.isMuted() ? '🔇' : '🔊';
+  }
+});
+
+/* API expuesta para el motor Meta Quest (quest-mr.js) */
+window.Cafecito = { Sound, LEVELS, VARIETIES, SYMPTOMS, pickSymptoms, fmtTime, toast };
+
+})();
+</script>
+<script src="quest-mr.js" defer></script>
+</body>
+</html>
